@@ -58,7 +58,7 @@ module safecrack_fsm (
 
         // Lógica principal da FSM
         case (state)
-            S_INIT: begin
+            S_INIT:
                 if (any_button_pressed) begin
                     if (btn == pass_step1) begin
                         next_state = S_STEP1_OK;
@@ -71,10 +71,8 @@ module safecrack_fsm (
                             next_state = S_INIT; // Volta ao início, mas com erro incrementado
                         end
                     end
-                end
-            end
 
-            S_STEP1_OK: begin
+            S_STEP1_OK:
                 if (any_button_pressed) begin
                     if (btn == pass_step2) begin
                         next_state = S_STEP2_OK;
@@ -86,10 +84,9 @@ module safecrack_fsm (
                             next_state = S_INIT;
                         end
                     end
-                end
-            end
+
            
-            S_STEP2_OK: begin
+            S_STEP2_OK:
                 if (any_button_pressed) begin
                     if (btn == pass_step3) begin
                         next_state = S_UNLOCKED;
@@ -100,8 +97,9 @@ module safecrack_fsm (
                             next_state = S_LOCKED;
                         end else begin
                             next_state = S_INIT;
-								end
-						  end
+						end
+					end
+		endcase
         // Valores padrão
         ledg = 9'b0;
         ledr = 18'b0;
