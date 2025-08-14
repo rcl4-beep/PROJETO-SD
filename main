@@ -1,130 +1,43 @@
 module safecrack_fsm (
-    input  logic       clk,            // Clock de 50 MHz da placa
-    input  logic       rst,            // Reset
-    input  logic [3:0] btn,            // Entradas dos botões (BTN[3:0]), ativas em nível baixo
-
-    output logic [8:0] ledg,           // Saída para os 9 LEDs verdes (LEDG[8:0]) - CORRIGIDO de [7:0] para [8:0]
-    output logic [17:0] ledr           // Saída para os 18 LEDs vermelhos (LEDR[17:0])
+    input  logic       clk,
+    input  logic       rst,
+    input  logic [3:0] btn,        // buttons inputs (BTN[3:0])
+    output logic       unlocked    // output: 1 when the safe is unlocked
 );
 
-    // --- Parâmetros ---
-    parameter logic [28:0] LOCKOUT_PERIOD = 29'd500_000_000; // ~10s @ 50MHz
-    // (Lógica de próximo estado e saídas movida para um único bloco 'always_ff' para clareza)
-    logic [1:0]  next_error_count;
-    logic [28:0] next_timer_count;
-    logic [3:0]  next_pass_step1, next_pass_step2, next_pass_step3;
+    // one-hot encoding
+    typedef enum logic [3:0] { 
+        S0 = 4'b0001,  // initial state
+        S1 = 4'b0010,  // BTN = 1 right
+        S2 = 4'b0100,  // BTN = 2 right
+        S3 = 4'b1000  // BTN = 4 right → unlock
+    } state_t;
 
-    always_ff @(posedge clk, posedge rst) begin
-        if (rst) begin
-            state       <= S_INIT;
-            error_count <= 2'b0;
-            timer_count <= 29'b0;
-            // Carrega a senha padrão no reset
-            pass_step1  <= DEFAULT_PASS_1;
-            pass_step2  <= DEFAULT_PASS_2;
-            pass_step3  <= DEFAULT_PASS_3;
-        end else begin
-            state       <= next_state;
-            error_count <= next_error_count;
-            timer_count <= next_timer_count;
-            // Atualiza a senha se for alterada
-            pass_step1  <= next_pass_step1;
-            pass_step2  <= next_pass_step2;
-            pass_step3  <= next_pass_step3;
-        end
-        // Contador livre para efeitos visuais
-        blink_counter <= blink_counter + 1;
+    state_t state, next;
+
+    // state transition
+    always_ff @(posedge clk) begin
+        if (rst)
+            state <= S0;
+        else
+            state <= next;
     end
 
-    // --- Lógica Combinacional (Próximo Estado e Saídas) ---
-
-    // ** CORREÇÃO APLICADA AQUI **
-    // 'any_button_pressed' é uma lógica combinacional que depende de uma entrada.
-    // Use 'assign' para defini-la.
-    logic any_button_pressed;
-    assign any_button_pressed = (btn != 4'b1111);
-
+    // transition logic
     always_comb begin
-        // Valores padrão para evitar latches
-        next_state       = state;
-        next_error_count = error_count;
-        next_timer_count = timer_count;
-        next_pass_step1  = pass_step1; // Mantém a senha por padrão
-        next_pass_step2  = pass_step2;
-        next_pass_step3  = pass_step3;
-       
-        // ** LÓGICA DE ERRO REFINADA **
-        // A flag de erro foi removida e a lógica integrada diretamente na FSM para maior clareza.
-
-        // Lógica principal da FSM
+        next = S0; // default
         case (state)
-            S_INIT:
-                if (any_button_pressed) begin
-                    if (btn == pass_step1) begin
-                        next_state = S_STEP1_OK;
-                        next_error_count = 0;
-                    end else if (btn != PROG_BUTTON) begin // Ignora o botão de programação nos estados de erro
-                        next_error_count = error_count + 1;
-                        if (next_error_count >= MAX_ERRORS) begin
-                            next_state = S_LOCKED;
-                        end else begin
-                            next_state = S_INIT; // Volta ao início, mas com erro incrementado
-                        end
-                    end
-
-            S_STEP1_OK:
-                if (any_button_pressed) begin
-                    if (btn == pass_step2) begin
-                        next_state = S_STEP2_OK;
-                    end else if (btn != PROG_BUTTON) begin
-                        next_error_count = error_count + 1;
-                        if (next_error_count >= MAX_ERRORS) begin
-                            next_state = S_LOCKED;
-                        end else begin
-                            next_state = S_INIT;
-                        end
-                    end
-
-           
-            S_STEP2_OK:
-                if (any_button_pressed) begin
-                    if (btn == pass_step3) begin
-                        next_state = S_UNLOCKED;
-                        next_error_count = 0;
-                    end else if (btn != PROG_BUTTON) begin
-                        next_error_count = error_count + 1;
-                        if (next_error_count >= MAX_ERRORS) begin
-                            next_state = S_LOCKED;
-                        end else begin
-                            next_state = S_INIT;
-						end
-					end
-		endcase
-        // Valores padrão
-        ledg = 9'b0;
-        ledr = 18'b0;
-
-        // Mostra a contagem de erros nos LEDs vermelhos enquanto não estiver travado
-        if (state != S_LOCKED) begin
-            ledr[1:0] = error_count;
-        end
-
-        case (state)
-            S_INIT:     ; // ledr já definido
-            S_STEP1_OK: ledg[0] = 1'b1;
-            S_STEP2_OK: ledg[1:0] = 2'b11;
-            S_UNLOCKED: begin
-                ledg = 9'h1FF; // Todos os verdes acesos
-                // Faz o LEDG[8] piscar para indicar que o modo de programação está disponível
-                if (!blink_on) ledg[8] = 1'b0;
-            end
-            S_LOCKED:   ledr = blink_counter[25] ? 18'h3FFFF : 18'h0; // Todos os vermelhos piscam
-           
-            // Feedback visual para o modo de programação
-            S_PROG_1:   if(blink_on) ledg[0] = 1'b1;
-            S_PROG_2:   if(blink_on) ledg[1:0] = 2'b11;
-            S_PROG_3:   if(blink_on) ledg[2:0] = 3'b111;
+            S0:    next = (btn == 4'b1110) ? S1 : S0;
+            S1:    next = (btn == 4'b1101) ? S2 : S1;
+            S2:    next = (btn == 4'b1011) ? S3 : S2;
+            S3:    next = S3;
+            default: next = S0;
         endcase
+    end
+
+    // output logic
+    always_comb begin
+        unlocked = (state == S3);
     end
 
 endmodule
