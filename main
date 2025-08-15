@@ -2,13 +2,16 @@ module safecrack_fsm (
     input  logic       clk,
     input  logic       rst,
     input  logic [3:0] btn,        // buttons inputs (BTN[3:0])
-    output logic [17:15] LEDR,     // acende leds vermelhos do 15 ao 17
-    output logic [2:0]  LEDG,      // acende leds verdes do 0 ao 2
-    output logic       unlocked    // output: 1 when the safe is unlocked
+    output logic  erro1,     // acende leds vermelhos do 15 ao 17
+    output logic  erro2,
+output logic  erro3,
+output logic  certo1,
+output logic  certo2,// acende leds verdes do 0 ao 2
+    output logic  unlocked    // output: 1 when the safe is unlocked
 );
 // certo!
     // one-hot encoding
-    typedef enum logic [8:0] { 
+    typedef enum logic [9:0] {
         B1 = 10'b0000000001,  // def btn1
         B2 = 10'b0000000010,  // def btn2
         B3 = 10'b0000000100,  // def btn3
@@ -42,39 +45,34 @@ module safecrack_fsm (
         end
     end
 // certo!
-    // transition logic
-    always_comb begin
-        LEDG = 3'b000;
-        LEDR = 3'b000;
-        next = S1; // default
+always_ff @(posedge clk) begin
         case (state)
-            S1:    next = (btn == B1) ? S2 : D1;
-            D1:    LEDR = 3'b001;
-                   next = (btn == B1) ? S2 : D1;
-            S2:    LEDG = 3'b001;
-                   next = (btn == B2) ? S3 : D2;
-            D2:    LEDR = 3'b011;
-                   next = (btn == B2) ? S3 : D2;
-            S3:    LEDG = 3'b011;
-                   next = (btn == B3) ? ER : D3;
-            D3:    LEDR = 3'b111;
-                   contador = contador + 1;
+B1: next = B2;
+            B2: next = B3;
+            B3: next = S1;
+            S1:   next = (btn == B1) ? S2 : D1;
+            D1:   next = (btn == B1) ? S2 : D2;
+            S2:   next = (btn == B2) ? S3 : D1;
+            D2:   next = (btn == B1) ? S2 : D3;
+            S3:   next = (btn == B3) ? ER : D1;
+            D3:    begin contador = contador + 1;
                    if (contador == 500000000) begin
                        next = S1;
                        contador = 0;
                        end
-            ER:    LEDG = 3'b111;
-                   next = ER;
+end
+ER: next = ER;
         endcase
-    end
+end
 
     // output logic
     always_comb begin
         unlocked = (state == ER);
-        if (unlocked) begin
-            LEDG = 3'b111;
-            LEDR = 3'b000;
-            end
+ erro1 = (state == D1);
+ erro2 = (state == D2);
+ erro3 = (state == D3);
+ certo1 = (state == S2);
+ certo2 = (state == S3);
     end
 
 endmodule
